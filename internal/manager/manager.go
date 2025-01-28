@@ -1,4 +1,4 @@
-package device
+package manager
 
 import (
 	"errors"
@@ -7,39 +7,32 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	devices "github.com/ppond454/iot-backend/internal/device"
 )
 
 type IController interface {
-	NewController() (*List, error)
-	CheckAliveWorker() func()
+	New(mqtt.Client) (*List, error)
+	StartAliveWorker() func()
 	FindDevice(device string)
 }
 
 type List struct {
-	devices map[string]*Device
+	devices map[string]devices.IoTDevice
 	mu      sync.Mutex
 }
 
 var client mqtt.Client = nil
 
-func NewController(host string) (*List, error) {
+func New(_client mqtt.Client) (*List, error) {
 	if client != nil {
 		return nil, errors.New("controller already exists")
 	}
-	opts := mqtt.NewClientOptions().AddBroker(host)
-	client = mqtt.NewClient(opts)
-	return &List{devices: make(map[string]*Device)}, nil
+	client = _client
+
+	return &List{devices: make(map[string]devices.IoTDevice)}, nil
 }
 
-func (list *List) Connect() error {
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		return fmt.Errorf("Error connecting to broker: &s", token.Error())
-	}
-	fmt.Printf("Connected to broker\n")
-	return nil
-}
-
-func (list *List) AddDevice(id string, d *Device) (map[string]*Device, error) {
+func (list *List) AddDevice(id string, d devices.IoTDevice) (map[string]devices.IoTDevice, error) {
 	list.mu.Lock()
 	defer list.mu.Unlock()
 	if _, exist := list.devices[id]; exist {
@@ -60,13 +53,9 @@ func (list *List) RemoveDevice(id string) error {
 	return errors.New("device does not exist")
 }
 
-func (list *List) Disconnect() {
-	client.Disconnect(250)
-}
-
-func (list *List) CheckAliveWorker(publishRate time.Duration) func() {
+func (list *List) StartAliveWorker(publishRate time.Duration) func() {
 	stop := make(chan struct{})
-	onAliveResponse(list)
+	go onAliveResponse(list)
 	go checkDeviceNotResp(list)
 
 	go func() {
@@ -91,28 +80,44 @@ func (list *List) CheckAliveWorker(publishRate time.Duration) func() {
 	}
 }
 
-func (list *List) FindDevice(id string) (*Device, bool) {
+func (list *List) FindDevice(id string) (devices.IoTDevice, bool) {
 	list.mu.Lock()
 	defer list.mu.Unlock()
 	device, have := list.devices[id]
 	if have {
 		return device, true
 	}
-	return &Device{}, false
+	return nil, false
 }
 
 func onAliveResponse(list *List) {
 	client.Subscribe("device/paired", 0, func(c mqtt.Client, m mqtt.Message) {
 		now := time.Now()
 		deviceID := string(m.Payload())
+		// type of device
 		device, have := list.FindDevice(deviceID)
 		if !have {
-			newDevice := NewDevice(deviceID, deviceID)
+			newDevice := devices.NewDevice("PC", deviceID, deviceID)
+
+			if newDevice == nil {
+				fmt.Println("Error creating new device")
+				return
+			}
+
 			list.AddDevice(deviceID, newDevice)
 			newDevice.Connected(&now)
+			fmt.Println("device :", newDevice.GetData(), "is new connected")
 
-		} else {
-			device.Connected(&now)
+			return
+		}
+
+		if !device.IsConnected() {
+			fmt.Println("device :", device.GetData().Id, "is reconnected")
+		}
+		device.Connected(&now)
+
+		for _, l := range list.devices {
+			fmt.Println("device :", l.GetData())
 		}
 	})
 }
@@ -123,9 +128,9 @@ func checkDeviceNotResp(list *List) {
 	for range ticker.C {
 		list.mu.Lock()
 		for _, device := range list.devices {
-			if device.IsConnected() && time.Since(*device.GetData().lastCheck) > (time.Second*5) {
+			if device.IsConnected() && time.Since(*device.GetData().LastCheck) > (time.Second*10) {
 				device.Disconnect()
-				fmt.Println("device :", device.Id, "is disconnected", device.isConnected)
+				fmt.Println("device :", device.GetData().Id, "is disconnected")
 			}
 		}
 		list.mu.Unlock()

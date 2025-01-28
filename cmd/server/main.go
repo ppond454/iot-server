@@ -5,21 +5,26 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/ppond454/iot-backend/device"
+	manager "github.com/ppond454/iot-backend/internal/manager"
+	mqttClient "github.com/ppond454/iot-backend/pkg/mqtt"
 )
 
 func main() {
-	controller, err := device.NewController("192.168.1.100:1883")
+
+	client, _, err := mqttClient.Connect("192.168.1.100:1883")
 
 	if err != nil {
 		fmt.Println("Error: ", err)
 		return
 	}
-	if err := controller.Connect(); err != nil {
+
+	manager, err := manager.New(client)
+	if err != nil {
 		fmt.Println("Error: ", err)
 		return
 	}
-	controller.CheckAliveWorker(time.Second * 2)
+	manager.StartAliveWorker(time.Second)
+
 	test()
 
 	select {}
@@ -27,11 +32,11 @@ func main() {
 }
 
 func test() {
-	opts := mqtt.NewClientOptions().AddBroker("192.168.1.100:1883")
-	client := mqtt.NewClient(opts)
-	if token := client.Connect(); token.Wait() && token.Error() != nil {
-		return
+	client, disconnect, err := mqttClient.Connect("192.168.1.100:1883")
 
+	if err != nil {
+		fmt.Println("Error: ", err)
+		return
 	}
 
 	client.Subscribe("device/pairing", 0, func(c mqtt.Client, m mqtt.Message) {
@@ -48,8 +53,8 @@ func test() {
 		}()
 		time.Sleep(time.Second * 3)
 		client.Unsubscribe("device/pairing")
-		time.Sleep(time.Second * 3)
-
+		disconnect()
+		time.Sleep(time.Second * 15)
 		test()
 	})
 
