@@ -6,7 +6,7 @@ import (
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 	manager "github.com/ppond454/iot-backend/internal/manager"
-	mqttClient "github.com/ppond454/iot-backend/pkg/mqtt"
+	mqttClient "github.com/ppond454/iot-backend/internal/mqtt"
 )
 
 func main() {
