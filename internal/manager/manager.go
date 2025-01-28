@@ -28,7 +28,6 @@ func New(_client mqtt.Client) (*List, error) {
 		return nil, errors.New("controller already exists")
 	}
 	client = _client
-
 	return &List{devices: make(map[string]devices.IoTDevice)}, nil
 }
 
@@ -45,6 +44,8 @@ func (list *List) AddDevice(id string, d devices.IoTDevice) (map[string]devices.
 }
 
 func (list *List) RemoveDevice(id string) error {
+	list.mu.Lock()
+	defer list.mu.Unlock()
 	if _, exist := list.devices[id]; exist {
 		delete(list.devices, id)
 		fmt.Printf("remove device: '%s' \n", id)
@@ -106,6 +107,7 @@ func onAliveResponse(list *List) {
 
 			list.AddDevice(deviceID, newDevice)
 			newDevice.Connected(&now)
+			// newDevice.
 			fmt.Println("device :", newDevice.GetData(), "is new connected")
 
 			return

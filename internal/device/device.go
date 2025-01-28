@@ -2,6 +2,8 @@ package device
 
 import (
 	"time"
+
+	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 type IoTDevice interface {
@@ -9,6 +11,7 @@ type IoTDevice interface {
 	Connected(time *time.Time)
 	Disconnect()
 	GetData() Device
+	ListenUpdate(callback func(), client mqtt.Client)
 }
 
 type Device struct {

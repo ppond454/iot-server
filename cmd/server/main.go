@@ -5,6 +5,7 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
+	devices "github.com/ppond454/iot-backend/internal/device"
 	manager "github.com/ppond454/iot-backend/internal/manager"
 	mqttClient "github.com/ppond454/iot-backend/internal/mqtt"
 )
@@ -24,6 +25,13 @@ func main() {
 		return
 	}
 	manager.StartAliveWorker(time.Second)
+
+	//TODO: On Connect io
+	var command map[string]string
+	if device, ok := manager.FindDevice(command["id"]); ok {
+		d := device.(*devices.MusicBox)
+		d.Play()
+	}
 
 	test()
 
