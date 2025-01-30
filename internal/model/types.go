@@ -1,4 +1,4 @@
-package device
+package model
 
 type DeviceType int
 

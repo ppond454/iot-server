@@ -1,4 +1,4 @@
-package manager
+package model
 
 import (
 	"errors"
@@ -7,7 +7,6 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	devices "github.com/ppond454/iot-backend/internal/device"
 )
 
 type IController interface {
@@ -19,12 +18,12 @@ type IController interface {
 
 type Params struct {
 	Client        mqtt.Client
-	OnStateChange func(*devices.Device, *List)
+	OnStateChange func(*Device, *List)
 }
 
 type List struct {
-	devices       map[string]devices.IoTDevice
-	onStateChange func(*devices.Device, *List)
+	devices       map[string]IoTDevice
+	onStateChange func(*Device, *List)
 	mu            sync.RWMutex
 }
 
@@ -36,12 +35,12 @@ func New(params *Params) (*List, error) {
 	}
 	client = params.Client
 	return &List{
-		devices:       make(map[string]devices.IoTDevice),
+		devices:       make(map[string]IoTDevice),
 		onStateChange: params.OnStateChange,
 	}, nil
 }
 
-func (list *List) AddDevice(id string, d devices.IoTDevice) (map[string]devices.IoTDevice, error) {
+func (list *List) AddDevice(id string, d IoTDevice) (map[string]IoTDevice, error) {
 	list.mu.Lock()
 	defer list.mu.Unlock()
 	if _, exist := list.devices[id]; exist {
@@ -91,7 +90,7 @@ func (list *List) StartAliveWorker(publishRate time.Duration) func() {
 	}
 }
 
-func (l *List) FindDevice(id string) (devices.IoTDevice, bool) {
+func (l *List) FindDevice(id string) (IoTDevice, bool) {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
 
@@ -124,7 +123,7 @@ func onAliveResponse(list *List) {
 		device, have := list.FindDevice(deviceID)
 		if !have {
 
-			newDevice := devices.NewDevice("PC", deviceID, deviceID, &client, func(device *devices.Device) {
+			newDevice := NewDevice("PC", deviceID, deviceID, &client, func(device *Device) {
 				list.onStateChange(device, list)
 			})
 
@@ -135,21 +134,21 @@ func onAliveResponse(list *List) {
 
 			list.AddDevice(deviceID, newDevice)
 			newDevice.SetLastCheck(&now)
-			newDevice.ChangeState(devices.CONNECTED)
+			newDevice.ChangeState(CONNECTED)
 			//TODO: for do something before idle state
 
-			newDevice.ChangeState(devices.IDLE)
+			newDevice.ChangeState(IDLE)
 			fmt.Println("device :", newDevice.GetData(), "is new connected")
 
 			return
 		}
 
 		device.SetLastCheck(&now)
-		if device.IsState(devices.DISCONNECTED) {
-			device.ChangeState(devices.CONNECTED)
+		if device.IsState(DISCONNECTED) {
+			device.ChangeState(CONNECTED)
 			//TODO: for do something before idle state
 
-			device.ChangeState(devices.IDLE)
+			device.ChangeState(IDLE)
 			fmt.Println("device :", device.GetData().Id, "is reconnected")
 		}
 	})
@@ -160,15 +159,15 @@ func checkDeviceNotResp(list *List) {
 	defer ticker.Stop()
 	for range ticker.C {
 		list.mu.RLock()
-		devicesCopy := make([]devices.IoTDevice, 0, len(list.devices))
+		devicesCopy := make([]IoTDevice, 0, len(list.devices))
 		for _, device := range list.devices {
 			devicesCopy = append(devicesCopy, device) // Copy devices for safe access
 		}
 		list.mu.RUnlock()
 
 		for _, device := range devicesCopy {
-			if !device.IsState(devices.DISCONNECTED) && time.Since(*device.GetData().LastCheck) > (time.Second*10) {
-				device.ChangeState(devices.DISCONNECTED)
+			if !device.IsState(DISCONNECTED) && time.Since(*device.GetData().LastCheck) > (time.Second*10) {
+				device.ChangeState(DISCONNECTED)
 				fmt.Println("device :", device.GetData().Id, "is disconnected")
 			}
 		}

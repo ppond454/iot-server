@@ -7,8 +7,7 @@ import (
 	"time"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
-	"github.com/ppond454/iot-backend/internal/device"
-	manager "github.com/ppond454/iot-backend/internal/manager"
+	"github.com/ppond454/iot-backend/internal/model"
 	mqttClient "github.com/ppond454/iot-backend/internal/mqtt"
 
 	"net/http"
@@ -29,7 +28,7 @@ func main() {
 	server := io.NewServer(nil)
 	defer server.Close()
 
-	OnStateChange := func(device *device.Device, list *manager.List) {
+	OnStateChange := func(device *model.Device, list *model.List) {
 		if d, ok := list.FindDevice(device.Id); ok {
 			fmt.Println("device update", d)
 			server.BroadcastToNamespace("/", "device_update", Response{
@@ -40,12 +39,12 @@ func main() {
 		}
 	}
 
-	params := &manager.Params{
+	params := &model.Params{
 		Client:        client,
 		OnStateChange: OnStateChange,
 	}
 
-	manager, err := manager.New(params)
+	manager, err := model.New(params)
 
 	if err != nil {
 		fmt.Println("Error: ", err)
@@ -97,7 +96,7 @@ func main() {
 			return
 		}
 
-		if !d.IsState(device.IDLE) {
+		if !d.IsState(model.IDLE) {
 			state := d.GetState()
 			s.Emit("command", Response{
 				Success: false,
