@@ -46,7 +46,7 @@ func (list *List) AddDevice(id string, d devices.IoTDevice) (map[string]devices.
 	defer list.mu.Unlock()
 	if _, exist := list.devices[id]; exist {
 		fmt.Printf("Device '%s' already exists\n", id)
-		return nil, fmt.Errorf("Device '%s' already exists", id)
+		return nil, fmt.Errorf("device '%s' already exists", id)
 	}
 	list.devices[id] = d
 	fmt.Printf("add device: '%s' \n", id)
