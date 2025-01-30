@@ -22,7 +22,6 @@ type State int
 
 const (
 	DISCONNECTED State = iota
-	CONNECTING
 	CONNECTED
 	IDLE
 	PROCESSING
