@@ -2,32 +2,30 @@ package device
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"strconv"
-	"sync"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
 type MusicBox struct {
 	Device
-	isPlaying bool
-	mu        sync.Mutex
+	IsOn      bool
+	IsPlaying bool
 }
 
 func (m *MusicBox) Get() *MusicBox {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	m.Device.mu.Lock()
+	defer m.Device.mu.Unlock()
 
 	return m
 }
 
-func (m *MusicBox) ChangeState(isPlaying bool) *MusicBox {
+func (m *MusicBox) SetPlaying(isPlaying bool) *MusicBox {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.isPlaying = isPlaying
+	m.IsPlaying = isPlaying
 	return m
 }
 
@@ -36,8 +34,9 @@ func (m *MusicBox) Play() *MusicBox {
 	return m
 }
 
-func (m *MusicBox) ListenUpdate(onUpdate func(), client mqtt.Client) {
-	topic := fmt.Sprintf("music_box/%s/update", m.Id)
+func (m *MusicBox) ListenUpdate() {
+	topic := m.Device.getTopicUpdate()
+	client := *m.client
 	client.Subscribe(topic, 0, func(c mqtt.Client, msg mqtt.Message) {
 		var data map[string]string
 		if err := json.Unmarshal(msg.Payload(), &data); err != nil {
@@ -55,12 +54,17 @@ func (m *MusicBox) ListenUpdate(onUpdate func(), client mqtt.Client) {
 			return
 		}
 
-		m.ChangeState(bool)
-		onUpdate()
+		m.SetPlaying(bool)
 	})
 }
 
-func (m *MusicBox) UnListenUpdate(client mqtt.Client) {
-	topic := fmt.Sprintf("music_box/%s/update", m.Id)
-	client.Unsubscribe(topic)
+func (m *MusicBox) RequestTurnOn() {
+}
+
+func (m *MusicBox) RequestTurnOff() {
+
+}
+
+func (m *MusicBox) RequestToPlay() {
+
 }

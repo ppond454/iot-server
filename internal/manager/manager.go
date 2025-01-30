@@ -11,24 +11,34 @@ import (
 )
 
 type IController interface {
-	New(mqtt.Client) (*List, error)
+	New(params *Params) (*List, error)
 	StartAliveWorker() func()
 	FindDevice(device string)
+	GetDevicesJSON() map[string]any
+}
+
+type Params struct {
+	Client        mqtt.Client
+	OnStateChange func(*devices.Device, *List)
 }
 
 type List struct {
-	devices map[string]devices.IoTDevice
-	mu      sync.Mutex
+	devices       map[string]devices.IoTDevice
+	onStateChange func(*devices.Device, *List)
+	mu            sync.RWMutex
 }
 
 var client mqtt.Client = nil
 
-func New(_client mqtt.Client) (*List, error) {
+func New(params *Params) (*List, error) {
 	if client != nil {
 		return nil, errors.New("controller already exists")
 	}
-	client = _client
-	return &List{devices: make(map[string]devices.IoTDevice)}, nil
+	client = params.Client
+	return &List{
+		devices:       make(map[string]devices.IoTDevice),
+		onStateChange: params.OnStateChange,
+	}, nil
 }
 
 func (list *List) AddDevice(id string, d devices.IoTDevice) (map[string]devices.IoTDevice, error) {
@@ -81,16 +91,31 @@ func (list *List) StartAliveWorker(publishRate time.Duration) func() {
 	}
 }
 
-func (list *List) FindDevice(id string) (devices.IoTDevice, bool) {
-	list.mu.Lock()
-	defer list.mu.Unlock()
-	device, have := list.devices[id]
-	if have {
+func (l *List) FindDevice(id string) (devices.IoTDevice, bool) {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	// TODO: check why can't lock
+	if device, have := l.devices[id]; have {
 		return device, true
 	}
 	return nil, false
 }
 
+func (l *List) GetDevicesJSON() map[string]any {
+	l.mu.RLock()
+	defer l.mu.RUnlock()
+
+	// Prepare a map for JSON response
+	result := make(map[string]any)
+
+	// Iterate over devices and extract their data
+	for id, device := range l.devices {
+		result[id] = device.GetDataResp() // Call GetData() to get Device struct
+	}
+
+	return result
+}
 func onAliveResponse(list *List) {
 	client.Subscribe("device/paired", 0, func(c mqtt.Client, m mqtt.Message) {
 		now := time.Now()
@@ -98,7 +123,10 @@ func onAliveResponse(list *List) {
 		// type of device
 		device, have := list.FindDevice(deviceID)
 		if !have {
-			newDevice := devices.NewDevice("PC", deviceID, deviceID)
+
+			newDevice := devices.NewDevice("PC", deviceID, deviceID, &client, func(device *devices.Device) {
+				list.onStateChange(device, list)
+			})
 
 			if newDevice == nil {
 				fmt.Println("Error creating new device")
@@ -106,20 +134,23 @@ func onAliveResponse(list *List) {
 			}
 
 			list.AddDevice(deviceID, newDevice)
-			newDevice.Connected(&now)
-			// newDevice.
+			newDevice.SetLastCheck(&now)
+			newDevice.ChangeState(devices.CONNECTED)
+			//TODO: for do something before idle state
+
+			newDevice.ChangeState(devices.IDLE)
 			fmt.Println("device :", newDevice.GetData(), "is new connected")
 
 			return
 		}
 
-		if !device.IsConnected() {
-			fmt.Println("device :", device.GetData().Id, "is reconnected")
-		}
-		device.Connected(&now)
+		device.SetLastCheck(&now)
+		if device.IsState(devices.DISCONNECTED) {
+			device.ChangeState(devices.CONNECTED)
+			//TODO: for do something before idle state
 
-		for _, l := range list.devices {
-			fmt.Println("device :", l.GetData())
+			device.ChangeState(devices.IDLE)
+			fmt.Println("device :", device.GetData().Id, "is reconnected")
 		}
 	})
 }
@@ -128,13 +159,18 @@ func checkDeviceNotResp(list *List) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for range ticker.C {
-		list.mu.Lock()
+		list.mu.RLock()
+		devicesCopy := make([]devices.IoTDevice, 0, len(list.devices))
 		for _, device := range list.devices {
-			if device.IsConnected() && time.Since(*device.GetData().LastCheck) > (time.Second*10) {
-				device.Disconnect()
+			devicesCopy = append(devicesCopy, device) // Copy devices for safe access
+		}
+		list.mu.RUnlock()
+
+		for _, device := range devicesCopy {
+			if !device.IsState(devices.DISCONNECTED) && time.Since(*device.GetData().LastCheck) > (time.Second*10) {
+				device.ChangeState(devices.DISCONNECTED)
 				fmt.Println("device :", device.GetData().Id, "is disconnected")
 			}
 		}
-		list.mu.Unlock()
 	}
 }

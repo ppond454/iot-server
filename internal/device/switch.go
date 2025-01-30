@@ -2,20 +2,20 @@ package device
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"strconv"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
 )
 
-type Switch struct {
+type ToggleSwitch struct {
 	Device
-	isOn bool
+	IsOn bool
 }
 
-func (sw *Switch) ListenUpdate(onUpdate func(), client mqtt.Client) {
-	topic := fmt.Sprintf("sw/%s/update", sw.Id)
+func (sw *ToggleSwitch) ListenUpdate() {
+	topic := sw.Device.getTopicUpdate()
+	client := *sw.client
 	client.Subscribe(topic, 0, func(c mqtt.Client, msg mqtt.Message) {
 		var data map[string]string
 		if err := json.Unmarshal(msg.Payload(), &data); err != nil {
@@ -33,7 +33,14 @@ func (sw *Switch) ListenUpdate(onUpdate func(), client mqtt.Client) {
 			return
 		}
 
-		sw.isOn = bool
-		onUpdate()
+		sw.IsOn = bool
 	})
+}
+
+func (sw *ToggleSwitch) RequestTurnOn() {
+
+}
+
+func (sw *ToggleSwitch) RequestTurnOff() {
+
 }
