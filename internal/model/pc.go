@@ -3,8 +3,6 @@ package model
 import (
 	"encoding/json"
 	"fmt"
-	"log"
-	"strconv"
 	"sync"
 
 	mqtt "github.com/eclipse/paho.mqtt.golang"
@@ -26,23 +24,12 @@ func (pc *Pc) ListenUpdate() {
 	client := *pc.client
 	topic := pc.Device.getTopicUpdate()
 	client.Subscribe(topic, 0, func(c mqtt.Client, msg mqtt.Message) {
-		var data map[string]string
-		if err := json.Unmarshal(msg.Payload(), &data); err != nil {
-			log.Printf("Invalid command: %v", err)
+		var body PcUpdateBody
+		if err := json.Unmarshal(msg.Payload(), &body); err != nil {
+			fmt.Println("Invalid JSON")
 			return
 		}
-		value, ok := data["power"]
-		if !ok {
-			log.Printf("Invalid data: %s", value)
-			return
-		}
-		bool, err := strconv.ParseBool(value)
-		if err != nil {
-			log.Printf("Invalid data: %s", value)
-			return
-		}
-
-		pc.UpdatePower(bool)
+		pc.UpdatePower(body.Power)
 		pc.ChangeState(IDLE)
 	})
 }
@@ -73,4 +60,8 @@ func (pc *Pc) RequestToggle() error {
 	}
 	pc.ChangeState(PROCESSING)
 	return nil
+}
+
+type PcUpdateBody struct {
+	Power bool `json:"power"`
 }

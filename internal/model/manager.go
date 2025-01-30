@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -118,21 +119,36 @@ func (l *List) GetDevicesJSON() map[string]any {
 func onAliveResponse(list *List) {
 	client.Subscribe("device/paired", 0, func(c mqtt.Client, m mqtt.Message) {
 		now := time.Now()
-		deviceID := string(m.Payload())
-		// type of device
-		device, have := list.FindDevice(deviceID)
-		if !have {
+		var payload DevicePairBody
+		err := json.Unmarshal(m.Payload(), &payload)
 
-			newDevice := NewDevice("PC", deviceID, deviceID, &client, func(device *Device) {
-				list.onStateChange(device, list)
-			})
+		if err != nil {
+			fmt.Println("Invalid JSON")
+			return
+		}
+		if payload.Id == "" || payload.Name == "" || payload.Type == "" {
+			fmt.Println("missing required fields in payload")
+			return
+		}
+
+		// type of device
+		device, have := list.FindDevice(payload.Id)
+		if !have {
+			newDevice := NewDevice(
+				payload.Type,
+				payload.Id,
+				payload.Name,
+				&client,
+				func(device *Device) {
+					list.onStateChange(device, list)
+				})
 
 			if newDevice == nil {
 				fmt.Println("Error creating new device")
 				return
 			}
 
-			list.AddDevice(deviceID, newDevice)
+			list.AddDevice(payload.Id, newDevice)
 			newDevice.SetLastCheck(&now)
 			newDevice.ChangeState(CONNECTED)
 			//TODO: for do something before idle state
