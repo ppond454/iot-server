@@ -31,18 +31,18 @@ type Device struct {
 	mu        sync.RWMutex
 }
 
-func NewDevice(_type, id, name string, client *mqtt.Client, callback func(*Device)) IoTDevice {
-	switch _type {
+func NewDevice(Type, Id, Name string, Client *mqtt.Client, Callback func(*Device)) IoTDevice {
+	switch Type {
 	case "PC":
 		return &Pc{
 			Device: Device{
-				Id:        id,
-				Name:      name,
+				Id:        Id,
+				Name:      Name,
 				Type:      PC,
 				State:     DISCONNECTED,
 				LastCheck: nil,
-				client:    client,
-				callback:  callback,
+				client:    Client,
+				callback:  Callback,
 			},
 			Power: false,
 		}
