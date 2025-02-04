@@ -6,7 +6,6 @@ import (
 	"log"
 	"time"
 
-	mqtt "github.com/eclipse/paho.mqtt.golang"
 	"github.com/ppond454/iot-backend/internal/model"
 	mqttClient "github.com/ppond454/iot-backend/internal/mqtt"
 
@@ -133,39 +132,9 @@ func main() {
 		}
 	}()
 
-	test()
 	PORT := ":8080"
 	fmt.Printf("Server running on %s\n", PORT)
 	log.Fatal(http.ListenAndServe(PORT, nil))
-
-}
-
-func test() {
-	client, disconnect, err := mqttClient.Connect("192.168.1.100:1883")
-
-	if err != nil {
-		fmt.Println("Error: ", err)
-		return
-	}
-
-	client.Subscribe("device/pairing", 0, func(c mqtt.Client, m mqtt.Message) {
-		// fmt.Printf("Received message: [%s] %s\n", m.Topic(), m.Payload())
-		go func() {
-			for i := 0; i < 2; i++ {
-				token := client.Publish("device/paired", 0, false, fmt.Sprintf("device%d", i))
-				token.Wait()
-				if token.Error() != nil {
-					fmt.Printf("Error publishing to topic: %v\n", token.Error())
-				}
-
-			}
-		}()
-		time.Sleep(time.Second * 3)
-		client.Unsubscribe("device/pairing")
-		disconnect()
-		time.Sleep(time.Second * 15)
-		test()
-	})
 
 }
 
